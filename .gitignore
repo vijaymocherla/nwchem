@@ -55,6 +55,13 @@ Module.symvers
 Mkfile.old
 dkms.conf
 
+# Build, Scratch and test files
+bin/
+QA/scratchdir/
+QA/testoutputs/
+src/tools/
+src/include/
+
 ### CUDA ###
 *.i
 *.ii
