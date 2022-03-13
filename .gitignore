@@ -61,6 +61,26 @@ QA/scratchdir/
 QA/testoutputs/
 src/tools/
 src/include/
+# flags and config files
+src/ga*.txt
+src/config/NWCHEM_CONFIG
+src/config/nwchem_config.h
+src/util/util_ga_version.F
+src/util/utl_module_avail.F
+src/util/util_nwchem_version.F
+src/util/util_scalapack_info.F
+src/util/util_version.F
+src/util/util_module_avail.F
+src/peigs/peigs_stamp.LINUX64
+
+# install-scripts
+compile.sh
+rt_tddft_compile.sh
+rt_tddft_compile.log
+err.log
+src/make.log
+QA/tests.sh
+
 
 ### CUDA ###
 *.i
