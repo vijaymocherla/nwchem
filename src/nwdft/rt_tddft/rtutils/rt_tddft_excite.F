@@ -235,6 +235,48 @@ C     == Variables ==
       end function
 
 
+C====================================================================
+C
+C     Computes Pi function for windowing pulse.
+C        added by @vijaymocherla 3/11/2022
+C
+      double precision function rt_tddft_pi_window (field, tt)
+      implicit none
+
+#include "errquit.fh"
+#include "global.fh"
+#include "stdio.fh"
+#include "rt_tddft.fh"
+      
+C     == Inputs ==
+      type(rt_field_t), intent(in)  :: field
+      double precision, intent(in)  :: tt
+      
+C     == Parameters ==
+      character(*) ,parameter  :: pname = "rt_tddft_pi_window: "
+
+C     == Variables ==
+      double precision tstart, tend, tshift, pout, arg, f0, muij
+
+      tstart = field%center - field%width / 2d0
+      tend = tstart + field%width
+      
+      tshift = tt - tstart
+      muij  = 1d0
+      f0 = 2d0 * dpi / (field%width * muij)
+
+      if ((tt .gt. tend).or.(tt .lt. tstart)) then
+         pout = 0d0
+      else
+         arg = dpi / field%width * tshift
+         pout = f0 * sin(arg) * sin(arg)
+      endif
+
+      rt_tddft_pi_window = pout
+
+      end function
+
+
 
 C====================================================================
 C
@@ -309,8 +351,7 @@ C     == Variables ==
       
       rt_tddft_sin2ramp_window = ramp
 
-      end function
-
+      end function    
       
 
 C====================================================================
@@ -340,6 +381,7 @@ C     == Parameters ==
 
 C     == External ==
       double precision, external :: rt_tddft_hann_window
+      double precision, external :: rt_tddft_pi_window
       double precision, external :: rt_tddft_gaussian_window
       double precision, external :: rt_tddft_sin2ramp_window
 
@@ -368,12 +410,15 @@ C     (frequency-containing pulses, potentially windowed)
          if ( (field%type .eq. "cw") .or.
      $        (field%type .eq. "gaussian") .or.
      $        (field%type .eq. "hann").or.
+     $        (field%type .eq. "pi").or.
      $        (field%type .eq. "sin2ramp")) then
             
             val = field%max * sin (field%frequency*tt + field%phase)
             
             if (field%type .eq. "hann") then
                val = val * rt_tddft_hann_window (field, tt)
+            elseif (field%type .eq. "pi") then
+               val = val * rt_tddft_pi_window(field, tt)  
             elseif (field%type .eq. "gaussian") then
                val = val * rt_tddft_gaussian_window (field, tt)
             elseif (field%type .eq. "sin2ramp") then

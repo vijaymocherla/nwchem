@@ -100,6 +100,7 @@ C
                if ( (type.ne."cw").and.
      $              (type.ne."delta").and.
      $              (type.ne."hann").and.
+     $              (type.ne."pi").and.
      $              (type.ne."sin2ramp").and.
      $              (type.ne."gaussian"))
      $              call errquit (pname//"invalid field type: "//
@@ -318,8 +319,26 @@ C
      $           trim(field_name)//
      $           ": cannot specify start if doing hann", 0, 0)
          endif
+
+         if (type .eq. "pi") then
+            if (.not. lhave_frequency)
+     $           call errquit (pname//trim(field_name)//
+     $           ": must supply a frequency if doing Pi", 0,0)
+            
+            if (.not. lhave_center) call errquit (pname//
+     $           trim(field_name)//
+     $           ": must specify center if Pi", 0,0)
+            
+            if (.not. lhave_width) call errquit (pname//
+     $           trim(field_name)//
+     $           ": must specify width if Pi", 0,0)
+
+            if (lhave_start) call errquit (pname//
+     $           trim(field_name)//
+     $           ": cannot specify start if doing Pi", 0, 0)
+         endif
          
-         
+                  
          if (type .eq. "delta") then
             if (lhave_frequency) call errquit (pname//trim(field_name)//
      $           ": cannot supply a frequency if doing delta", 0,0)
@@ -378,11 +397,14 @@ C
 C     Frequency-related stuff only valid for CW and pulses (gaussian, hann)
 C     
          if (lhave_phase .or. lhave_frequency) then
-            if ((type .ne. "cw").and.(type .ne. "gaussian")
-     $           .and. (type .ne. "hann").and.(type .ne. "sin2ramp"))
+            if ( (type .ne. "cw").and.
+     $           (type .ne. "gaussian").and.
+     $           (type .ne. "hann").and.
+     $           (type .ne. "pi").and.
+     $           (type .ne. "sin2ramp") )
      $           call errquit (pname//
-     $           "phase and frequency only valid for "//
-     $           "CW, gaussian, hann, and sin2ramp",0,0)
+     $           "wrong message phase and frequency only valid for "//
+     $           "CW, gaussian, hann, pi and sin2ramp",0,0)
          endif
       endif
 
@@ -413,6 +435,15 @@ C
          this_field%center = center
          this_field%start = -99d0         
       elseif (type.eq."hann") then
+         this_field%polarization = polarization
+         this_field%max = max
+         this_field%spin = spin1
+         this_field%frequency = frequency
+         this_field%phase = phase
+         this_field%width = width
+         this_field%center = center
+         this_field%start = -99d0
+      elseif (type.eq."pi") then
          this_field%polarization = polarization
          this_field%max = max
          this_field%spin = spin1
