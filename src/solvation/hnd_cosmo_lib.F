@@ -429,9 +429,13 @@ c
       integer l_efcc, k_efcc, l_efcs, k_efcs, l_efcz, k_efcz
       integer l_efclb, k_efclb, k_efciat, l_efciat
       integer l_efczz, k_efczz
+      integer l_msrf,k_msrf
       double precision ratm_real,dij,dum,cavdsp,pi,zetai,zetaii
       integer m,mfac,mseg
       integer nefc,iat,jat,npp,i,iseg,ifac,ief,ipp
+
+      integer l_dum1, l_dum2, l_attag, k_dum1, k_dum2, k_attag
+      character(len=16) aname
 
       integer op, iat_new
       double precision vector(3), symfact
@@ -444,6 +448,9 @@ c
 
       integer sym_number_ops, sym_center_map
       external sym_number_ops, sym_center_map
+
+      logical geom_cart_get
+      external geom_cart_get
 c
 c     MN solvation models -->
 c
@@ -454,6 +461,7 @@ c
       double precision dist, xi, yi, zi, xj, yj, zj, rin, rout, alphai
       parameter (alphai = 0.5d0)
       logical oprint_debug
+      logical oprint_molsurf
 c
       dist(xi,yi,zi,xj,yj,zj)=sqrt((xj-xi)**2+(yj-yi)**2+(zj-zi)**2)
       rin(iat)=ratm(iat)*(1.0d0-alphai*gammas*sqrt(0.25d0**minbem))
@@ -461,6 +469,8 @@ c
      &                     sqrt(0.25d0**minbem))
 c
       oprint_debug = util_print("cosmo_cossas_debug",print_debug).and.
+     D     (ga_nodeid().eq.0)
+      oprint_molsurf = util_print("cosmo_mol_surface",print_never).and.
      D     (ga_nodeid().eq.0)
       pi = acos(-1.0d0)
 c
@@ -704,7 +714,25 @@ c
       if(.not.ma_push_get(mt_dbl,nefc,'cosmo zeta',l_efczz,k_efczz))
      & call errquit('cosmo_cossas malloc k_efczz failed',911,MA_ERR) 
       if(.not.ma_push_get(mt_byte,nefc*8,'cosmo tags',l_efclb,k_efclb))
-     & call errquit('cosmo_cossas malloc k_tag failed',911,MA_ERR)
+     &     call errquit('cosmo_cossas malloc k_tag failed',911,MA_ERR)
+      if(oprint_molsurf)  then
+         if(.not.ma_push_get(mt_dbl,nefc,'molsurf',l_msrf,k_msrf))
+     &        call errquit('cosmo_cossas malloc k_tag failed',1,MA_ERR)
+         call dfill(nefc,0.0d0,dbl_mb(k_msrf),1)
+      endif
+
+      if(oprint_debug) then
+        if(.not.ma_push_get(mt_dbl,nat*3,'coord',l_dum1,k_dum1))
+     &   call errquit('cosmo_cossas malloc dum1 failed',911,MA_ERR)
+        if(.not.ma_push_get(mt_dbl,nat,'cosmo z',l_dum2,k_dum2)) call
+     &    errquit('cosmo_cossas malloc k_dum2 failed',911,MA_ERR)
+        if(.not.ma_push_get(mt_byte,nat*16,'tags',l_attag,k_attag)) call
+     &    errquit('cosmo_cossas malloc k_attag failed',911,MA_ERR)
+c
+        if(.not.geom_cart_get(geom,nat,byte_mb(k_attag),
+     &     dbl_mb(k_dum1),dbl_mb(k_dum2))) call errquit
+     $      (' cosmo_cossas: geom_cart_get failed.',911, GEOM_ERR)
+      endif
 c
 c     ----- save coordinates of surface points -----
 c           save segment surfaces
@@ -714,13 +742,6 @@ c
       volmol=0d0
       ief   =0
 
-      if(oprint_debug) then
-        write(luout,*)
-        write(luout,'(" --- Geometry including SAS --- ")')
-        do iat=1,nat
-          write(luout,'(3F12.6)') (xyzatm(i,iat)*cau2ang,i=1,3)
-        enddo
-      endif
 
       do iat=1,nat
          if(ratm(iat).ne.0d0) then
@@ -749,10 +770,6 @@ c                     dbl_mb(k_efcc+3*(ief-1)+i-1)=xyzspa(i,iseg,iat)
                      dbl_mb(k_efcc+3*(ief-1)+2)=xyzspa(3,iseg,iat)
 c                    enddo
                   endif
-                  if(oprint_debug) then
-                    write(luout,'(3F12.6)') 
-     1              (dbl_mb(k_efcc+3*(ief-1)+i-1)*cau2ang,i=1,3)
-                  endif
                   ipp=numpps(iseg,iat)
                   if (do_cosmo_model.eq.DO_COSMO_KS) then
                     dbl_mb(k_efcs+ief-1) = dble(ipp)*dsurf*ratm_real**2
@@ -766,12 +783,22 @@ c
                       zetai=zeta/sqrt(dsurf)/ratm_real
                       zetaii=zetai*sqrt(2d0/pi)
                       dbl_mb(k_efcs+ief-1) = (zetaii/xyzff(iseg,iat))
+c     769
+                      if(oprint_molsurf)  then
+                         dbl_mb(k_msrf+ief-1)=
+     x                        xyzff(iseg,iat)*dsurf*ratm_real**2
+                      endif
                       srfmol = srfmol+xyzff(iseg,iat)*dsurf*ratm_real**2
                       volmol = volmol+xyzff(iseg,iat)*dvol *ratm_real**3
                     else
                       zetai=zeta/(ratm_real*sqrt(wleb(iseg)))
                       zetaii=zetai*sqrt(2d0/pi)
                       dbl_mb(k_efcs+ief-1) = zetaii/xyzff(iseg,iat)
+c 775
+                      if(oprint_molsurf)  then
+                         dbl_mb(k_msrf+ief-1)=
+     x                        xyzff(iseg,iat)*wleb(iseg)*ratm_real**2
+                      endif
                       srfmol = srfmol + xyzff(iseg,iat)*
      $                                  wleb(iseg)*ratm_real**2
                       volmol = volmol + xyzff(iseg,iat)*
@@ -782,11 +809,32 @@ c
                   dbl_mb(k_efczz+ief-1) =zetai
                endif
             enddo
-            if(oprint_debug) write(luout,*)
          endif
       enddo
       srfmol=srfmol*(cau2ang**2)
       volmol=volmol*(cau2ang**3)
+c
+      if(oprint_debug) then
+        write(luout,*)
+        write(luout,'(" --- Geometry including SAS --- ")')
+        write(luout,*) nat+nefc
+        write(luout,*)
+        do iat=1,nat
+          call util_set_ma_char_arrays(16,
+     $                                byte_mb(k_attag+16*(iat-1)),
+     $                                aname)
+          write(luout,'(A10,3F12.6)') aname(1:2),
+     $                                (xyzatm(i,iat)*cau2ang,i=1,3)
+        enddo
+        do ief=1,nefc
+          write(luout,'(A10,3F12.6)') "X",
+     1    (dbl_mb(k_efcc+3*(ief-1)+i-1)*cau2ang,i=1,3)
+        enddo
+        write(luout,'(" --- End of Geometry including SAS --- ")')
+        write(luout,*)
+        if (.not.ma_chop_stack(l_dum1))
+     $    call errquit('hnd_cossas: could not chop stack',0,MA_ERR)   
+      endif
 c
       if(ga_nodeid().eq.0) then
          write(luout,9990) nefc
@@ -817,12 +865,21 @@ c <-- MN solvation models
 c
 c     ----- print segment surfaces -----
 c
-      if(oprint_debug) then
-         write(luout,9989)
-         do ief=1,nefc
-            write(luout,9988) ief,dbl_mb(k_efcs+ief-1),
-     &                        int_mb(k_efciat+ief-1)
-         enddo
+      if(oprint_molsurf) then
+        if (do_cosmo_model.eq.DO_COSMO_KS) then
+           write(luout,9989)
+           do ief=1,nefc
+              write(luout,9988) ief,dbl_mb(k_efcs+ief-1),
+     &                          int_mb(k_efciat+ief-1)
+           enddo
+        else if (do_cosmo_model.eq.DO_COSMO_YK) then
+           write(luout,*) ' Contributions to the molecular surface '
+           do ief=1,nefc
+              write(luout,*) ief,
+     W           dbl_mb(k_msrf+ief-1)
+           enddo
+
+        endif
       endif
 c
       do ief=1,nefc
@@ -870,17 +927,7 @@ c     if(.not.rtdb_cput(rtdb,'char variable',nefc,byte_mb(k_efclb)))
 c    $   call errquit('hnd_cossas: rtdb put failed for efclab',917,
 c    &       rtdb_err)
 c
-      if(.not.ma_pop_stack(l_efclb)) call
-     &   errquit('cosmo_cossas chop stack k_efclb failed',911,MA_ERR)
-      if(.not.ma_pop_stack(l_efczz)) call
-     &   errquit('cosmo_cossas chop stack k_efczz failed',911,MA_ERR) 
-      if(.not.ma_pop_stack(l_efcz)) call
-     &   errquit('cosmo_cossas chop stack k_efcz failed',911,MA_ERR)
-      if(.not.ma_pop_stack(l_efciat)) call
-     &   errquit('cosmo_cossas chop stack k_efciat failed',911,MA_ERR)
-      if(.not.ma_pop_stack(l_efcs)) call
-     &   errquit('cosmo_cossas chop stack k_efcs failed',911,MA_ERR)
-      if(.not.ma_pop_stack(l_efcc)) call
+      if(.not.ma_chop_stack(l_efcc)) call
      &   errquit('cosmo_cossas chop stack k_efcc failed',911,MA_ERR)
 c
       return

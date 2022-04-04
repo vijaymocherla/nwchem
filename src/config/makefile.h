@@ -71,7 +71,7 @@ ifndef NWCHEM_TARGET
     endif
 endif
 
-ifneq ($(NWCHEM_TARGET),$(findstring $(NWCHEM_TARGET), LINUX64 LINUX MACX MACX64 CATAMOUNT CYGWIN64 CYGNUYS CYGWIN BGL BGP BGQ HPUX HPUX64 IBM IBM64 LAPI LAPI64 PURESOLARIS SOLARIS SOLARIS64 SGI_N32 SGITFP))
+ifneq ($(NWCHEM_TARGET),$(findstring $(NWCHEM_TARGET), LINUX64 LINUX MACX MACX64 CATAMOUNT CYGWIN64 CYGNUYS CYGWIN BGL BGP BGQ HPUX HPUX64 IBM IBM64 LAPI LAPI64 PURESOLARIS SOLARIS SOLARIS64))
     error20:
 	$(info     )
 	$(info unrecognized NWCHEM_TARGET value $(NWCHEM_TARGET))
@@ -641,18 +641,6 @@ endif
 
 
 ifeq ($(TARGET),CRAY-T3E)
-    @echo DEPRECATED
-    @exit
-endif
-
-
-ifeq ($(TARGET),SGITFP)
-    @echo DEPRECATED
-    @exit
-endif
-
-
-ifeq ($(TARGET),SGI_N32)
     @echo DEPRECATED
     @exit
 endif
@@ -1496,6 +1484,9 @@ ifeq ($(TARGET),MACX64)
                 FOPTIONS += -fimf-arch-consistency=true
             endif
         endif
+        ifeq ($(V),-1)
+            FOPTIONS += -diag-disable=7713,8291,15009
+        endif
     endif #ifort
 
 
@@ -2171,9 +2162,15 @@ ifneq ($(TARGET),LINUX)
                 COPTIONS += -w
             else
                 FOPTIMIZE  += -Wuninitialized
-                COPTIONS += -Wall
-                ifndef USE_FLANG
-                    FOPTIMIZE  += -Wno-maybe-uninitialized
+                ifeq ($(_CC),$(findstring $(_CC),gcc clang))
+                    COPTIONS += -Wall
+		endif
+                ifeq ($(GNU_GE_4_8),true)
+                    ifndef USE_FLANG
+                        FOPTIMIZE  += -Wno-maybe-uninitialized
+                    endif
+                else
+                    FOPTIONS   += -Wuninitialized
                 endif
             endif
 
@@ -2210,22 +2207,9 @@ ifneq ($(TARGET),LINUX)
 #                   FDEBUG =-O2 -g
                 endif
                 FDEBUG +=-fno-aggressive-loop-optimizations
+                FOPTIONS +=-fno-aggressive-loop-optimizations
                 FOPTIMIZE +=-fno-aggressive-loop-optimizations
                 FFLAGS_FORGA += -fno-aggressive-loop-optimizations
-                ifeq ($(V),-1)
-                    FOPTIONS += -w
-                else
-                    FOPTIONS += -Warray-bounds
-                endif
-            else
-                ifeq ($(V),-1)
-                    FOPTIONS += -w
-                else
-                    FOPTIONS   += -Wuninitialized
-                    ifndef USE_FLANG
-                        FOPTIONS   += -Wno-maybe-uninitialized # -Wextra -Wunused
-                    endif
-                endif
             endif
 
             ifeq ($(GNU_GE_8),true)
@@ -2385,7 +2369,7 @@ ifneq ($(TARGET),LINUX)
                     FOPTIONS += -i8
                 endif
                 ifdef USE_OPENMP
-                    FOPTIONS += -fiopenmp
+                    FOPTIONS += -fopenmp
                     ifdef USE_OFFLOAD
                         FOPTIONS += -fopenmp-targets=spirv64
                     endif
@@ -2456,6 +2440,9 @@ ifneq ($(TARGET),LINUX)
                             FOPTIONS += -qopt-report-annotate-position=both
                         endif
                         FOPTIONS += -qopt-report-file=stderr
+                    endif
+                    ifeq ($(V),-1)
+                        FOPTIONS += -diag-disable=7713,8291,15009
                     endif
 #                   to avoid compiler crashes on simd directive. e.g .Version 15.0.2.164 Build 20150121
                     ifdef USE_NOSIMD
@@ -2962,8 +2949,10 @@ ifneq ($(TARGET),LINUX)
             ifeq ($(_FC),xlf)
                 #RSQRT=y breaks intchk QA
                 FOPTIONS  =  -q64 -qextname -qfixed #-qnosave  #-qalign=4k
-                FOPTIONS +=  -NQ40000 -NT80000 -qmaxmem=8192 -qsuppress=1500-030 -qxlf77=leadzero
-                FOPTIONS +=  -qsuppress=cmpmsg
+                FOPTIONS +=  -NQ40000 -NT80000 -qmaxmem=8192 -qxlf77=leadzero
+                ifeq ($(V),-1)
+                   FOPTIONS += -qsuppress=cmpmsg -qsuppress=1501-264 -qsuppress=1500-030
+		endif
                 ifdef  USE_GPROF
                     FOPTIONS += -pg
                     LDOPTIONS += -pg
@@ -3008,6 +2997,13 @@ ifneq ($(TARGET),LINUX)
 #           CORE_LIBS +=  $(BLASOPT) -lnwclapack -lnwcblas
 #           EXTRA_LIBS +=  -dynamic-linker /lib64/ld64.so.1 -melf64ppc -lxlf90_r -lxlopt -lxlomp_ser -lxl -lxlfmath -ldl -lm -lc -lgcc -lm
         endif # end of ppc64 arch
+
+	ifeq ($(_CC),pgcc)
+            COPTIONS += -fast -O3 -Munroll
+            ifdef USE_OPENMP
+                COPTIONS += -mp
+            endif
+	endif
 
 
         ifeq ($(_FC),pgf90)

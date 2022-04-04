@@ -128,6 +128,7 @@ np_small=$(get_limit $np 64)
 ./runtests.mpi.unix procs $np tce_eomsd_eomsol1
 ./runtests.mpi.unix procs $np tce_cc2_c2
 ./runtests.mpi.unix procs $np ducc_be
+./runtests.mpi.unix procs $np n2_ccsdtoks
 #./runtests.mpi.unix procs $np li2h2_tce_ccsd # always hangs
 if [[ ! -z "$MRCC_METHODS" ]]; then
 #  if ( "x$MRCC_METHODS" == "xy" ) then
@@ -314,6 +315,7 @@ np_small=$(get_limit $np 16)
 ./runtests.mpi.unix procs $np dft_rscan
 ./runtests.mpi.unix procs $np dft_scan
 ./runtests.mpi.unix procs $np rt_tddft_dimer_charge
+./runtests.mpi.unix procs $np rt_tddft_mocap
 ./runtests.mpi.unix procs $np dft_ne_n12
 ./runtests.mpi.unix procs $np dft_mfm_ch3
 #
@@ -340,6 +342,7 @@ fi
 ./runtests.mpi.unix procs $np dft_ar2p_wb97
 ./runtests.mpi.unix procs $np dft_waterdimer_wb97d3
 ./runtests.mpi.unix procs $np dft_s66x8_waterdimer
+./runtests.mpi.unix procs $np dft_c2br6_vdw4
 #
 ./runtests.mpi.unix procs $np aump2 
 ./runtests.mpi.unix procs $np n2_ccsd 
