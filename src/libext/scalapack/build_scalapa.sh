@@ -29,7 +29,8 @@ if [[  -z "${NWCHEM_TOP}" ]]; then
     NWCHEM_TOP=$(dirname "$dir2")
 fi
 if [[ ! -z "${BUILD_MPICH}" ]]; then
-      export PATH=${NWCHEM_TOP}/src/libext/bin:$PATH
+    export PATH=${NWCHEM_TOP}/src/libext/bin:$PATH
+    export LDFLAGS=`pkg-config --libs-only-L hwloc`
 fi
 if [[ "$FC" = "ftn"  ]] || [[ ! -z "$USE_CMAKE_MASTER" ]] ; then
     get_cmake_master
@@ -100,7 +101,8 @@ fi
 VERSION=2.1.0
 #curl -L https://github.com/Reference-ScaLAPACK/scalapack/archive/v${VERSION}.tar.gz -o scalapack.tgz
 #COMMIT=bc6cad585362aa58e05186bb85d4b619080c45a9
-COMMIT=ea5d20668a6b8bbee645b7ffe44623c623969d33
+#COMMIT=ea5d20668a6b8bbee645b7ffe44623c623969d33
+COMMIT=5bad7487f496c811192334640ce4d3fc5f88144b
 rm -rf scalapack 
 if [[ -f "scalapack-$COMMIT.zip" ]]; then
     echo "using existing"  "scalapack-$COMMIT.zip"
@@ -117,6 +119,9 @@ ln -sf scalapack-$COMMIT scalapack
 cd scalapack
 # macos accelerate does not contain dcombossq
 if [[ $(echo "$BLASOPT" |awk '/Accelerate/ {print "Y"; exit}' ) == "Y" ]]; then
+    export USE_DCOMBSSQ=1
+fi
+if [[ $(echo ""$BLASOPT |awk '/lfjlapack/ {print "Y"; exit}'  ) == "Y" ]]; then
     export USE_DCOMBSSQ=1
 fi
 if [[  -z "$USE_DCOMBSSQ" ]]; then
@@ -176,6 +181,10 @@ if [[  -z "$MPICH_FC"   ]] ; then
     export MPICH_FC="$FC"
     echo MPICH_FC is "$MPICH_FC"
 fi
+if [[  -z "$MPICH_CC"   ]] ; then
+    export MPICH_CC="$CC"
+    echo MPICH_CC is "$MPICH_CC"
+fi
 #Intel MPI
 if [[  -z "$I_MPI_F90"   ]] ; then
     export I_MPI_F90="$FC"
@@ -200,11 +209,19 @@ if [[  "$SCALAPACK_SIZE" == 8 ]] ; then
     Fortran_FLAGS=" -qintsize=8 -qextname "
     elif  [[ ${FC} == crayftn ]]; then
     Fortran_FLAGS=" -s integer64 -h nopattern"
+    elif  [[ ${FC} == frtpx ]] || [[ ${FC} == frt ]]; then
+    Fortran_FLAGS=" -fs -CcdLL8 -CcdII8 "
     else
     Fortran_FLAGS+=" -i8 "
     fi
     C_FLAGS+=" -DInt=long"
 fi
+#cross-compilation: we set CDEFS
+#https://github.com/Reference-ScaLAPACK/scalapack/commit/1bdf63ec17bf8e827b8c5abd292f0e41bdc2f56e
+CMAKE_EXTRA=" "
+if  [[ ${FC} == frtpx ]] ; then
+    CMAKE_EXTRA="-DCDEFS=Add_"
+fi    
 #skip argument check for gfortran
 arch=`uname -m`
 echo arch is $arch
@@ -237,8 +254,9 @@ if [[ "$arch" == "i686" ]] || [[ "$arch" == "x86_64" ]]; then
        C_FLAGS+=" -m32 "
     fi
 fi
-echo compiling with CC="$MPICC"  FC=$MPIF90 CFLAGS="$C_FLAGS" FFLAGS="$Fortran_FLAGS" $CMAKE -Wno-dev ../ -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_C_FLAGS="$C_FLAGS"  -DCMAKE_Fortran_FLAGS="$Fortran_FLAGS" -DTEST_SCALAPACK=OFF  -DBUILD_TESTING=OFF -DBUILD_SHARED_LIBS=OFF  -DBLAS_openblas_LIBRARY="$BLASOPT"  -DBLAS_LIBRARIES="$BLASOPT"  -DLAPACK_openblas_LIBRARY="$BLASOPT"  -DLAPACK_LIBRARIES="$BLASOPT" -DCMAKE_Fortran_FLAGS_RELWITHDEBINFO="-O2 -g -DNDEBUG  $Fortran_FLAGS"
-CC="$MPICC"  FC=$MPIF90 CFLAGS="$C_FLAGS" FFLAGS="$Fortran_FLAGS" $CMAKE -Wdev ../ -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_C_FLAGS="$C_FLAGS"  -DCMAKE_Fortran_FLAGS="$Fortran_FLAGS" -DTEST_SCALAPACK=OFF  -DBUILD_TESTING=OFF -DBUILD_SHARED_LIBS=OFF  -DBLAS_openblas_LIBRARY="$BLASOPT"  -DBLAS_LIBRARIES="$BLASOPT"  -DLAPACK_openblas_LIBRARY="$BLASOPT"  -DLAPACK_LIBRARIES="$BLASOPT" -DCMAKE_Fortran_FLAGS_RELWITHDEBINFO="-O2 -g -DNDEBUG  $Fortran_FLAGS"
+echo LDFLAGS is $LDFLAGS
+echo compiling with CC="$MPICC"  FC=$MPIF90 CFLAGS="$C_FLAGS" FFLAGS="$Fortran_FLAGS" $CMAKE -Wno-dev ../ -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_C_FLAGS="$C_FLAGS"  -DCMAKE_Fortran_FLAGS="$Fortran_FLAGS" -DTEST_SCALAPACK=OFF  -DBUILD_TESTING=OFF -DBUILD_SHARED_LIBS=OFF  -DBLAS_openblas_LIBRARY="$BLASOPT"  -DBLAS_LIBRARIES="$BLASOPT"  -DLAPACK_openblas_LIBRARY="$BLASOPT"  -DLAPACK_LIBRARIES="$BLASOPT" -DCMAKE_Fortran_FLAGS_RELWITHDEBINFO="-O2 -g -DNDEBUG  $Fortran_FLAGS"  $CMAKE_EXTRA
+CC="$MPICC"  FC=$MPIF90 CFLAGS="$C_FLAGS" FFLAGS="$Fortran_FLAGS" $CMAKE -Wdev ../ -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_C_FLAGS="$C_FLAGS"  -DCMAKE_Fortran_FLAGS="$Fortran_FLAGS" -DTEST_SCALAPACK=OFF  -DBUILD_TESTING=OFF -DBUILD_SHARED_LIBS=OFF  -DBLAS_openblas_LIBRARY="$BLASOPT"  -DBLAS_LIBRARIES="$BLASOPT"  -DLAPACK_openblas_LIBRARY="$BLASOPT"  -DLAPACK_LIBRARIES="$BLASOPT" -DCMAKE_Fortran_FLAGS_RELWITHDEBINFO="-O2 -g -DNDEBUG  $Fortran_FLAGS" $CMAKE_EXTRA
 if [[ "$?" != "0" ]]; then
     echo " "
     echo "cmake failed"

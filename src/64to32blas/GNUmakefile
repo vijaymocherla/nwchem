@@ -10,7 +10,7 @@
                  ypotri.o ypotrf.o ysygv.o ygeev.o ygeevx.o \
                  ygels.o ygelss.o ygtsv.o\
                  ypftrf.o ypftri.o ytfsm.o \
-                 ygetrf.o ygetri.o \
+                 ygetrf.o ygetri.o ygetrs.o \
                  ifily.o\
                  jscal.o jaxpy.o jgemm.o jheev.o jcopy.o jdotc.o \
                  ijamax.o jgesvd.o jgeev.o jgetrs.o jgetrf.o \
@@ -19,12 +19,6 @@
                  ysyr2k.o ytrmm.o ytrtri.o jlacp2.o \
 		 ysyrk.o jsyrk.o jsysv.o jsytrf.o
 
-        ifndef BLAS_SIZE
-	LIB_DEFINES += -DUSE_INTEGER8
-	endif
-        ifeq ($(BLAS_SIZE),8)
-	LIB_DEFINES += -DUSE_INTEGER8
-	endif
 
 include ../config/makefile.h
 include ../config/makelib.h

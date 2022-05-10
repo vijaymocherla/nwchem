@@ -198,6 +198,7 @@ endif
               util_nwchem_paper.o util_nwchem_srcdir.o utilc_nwchem_srcdir.o \
               mk_fit_xf.o \
               int_2c_ga.o \
+              ma_solve.o \
               ga_local_mdot.o \
               util_cpusec.o util_wallsec.o \
 	      gather.o scatter.o \
@@ -244,7 +245,7 @@ endif
     HEADERS = util.fh itri.fh msgids.fh  numerical_constants.fh stdio.fh \
               printlevels.fh bitops.fh bitops_decls.fh bitops_funcs.fh \
               bgj.fh bgj_common.fh nwc_const.fh errquit.fh util_sgroup.fh \
-	      util_params.fh utilc_nwchem_srcdir.fh util_maxlength.fh
+	      util_params.fh utilc_nwchem_srcdir.fh util_maxlength.fh util_intsize.fh
 #if USE_VTUNE
     HEADERS += vtune.fh
 #endif

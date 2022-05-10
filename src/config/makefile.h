@@ -255,6 +255,9 @@ ifdef USE_LIBXC
     NW_CORE_SUBDIRS += libext
 endif
 
+ifdef USE_TBLITE
+    NW_CORE_SUBDIRS += libext
+endif
 
 ifdef BUILD_OPENBLAS
     ifndef BLAS_SIZE
@@ -320,6 +323,7 @@ ifdef BUILD_MPICH
     MPI_INCLUDE = $(shell PATH=$(NWCHEM_TOP)/src/libext/bin:$(PATH) $(NWCHEM_TOP)/src/tools/guess-mpidefs --mpi_include)
     MPI_LIB     = $(shell PATH=$(NWCHEM_TOP)/src/libext/bin:$(PATH)  $(NWCHEM_TOP)/src/tools/guess-mpidefs --mpi_lib)
     LIBMPI      = $(shell PATH=$(NWCHEM_TOP)/src/libext/bin:$(PATH) $(NWCHEM_TOP)/src/tools/guess-mpidefs --libmpi)
+    LIBMPI	+=  $(shell pkg-config --libs-only-L hwloc)
 endif
 
 
@@ -508,7 +512,7 @@ ifeq ($(TARGET),SOLARIS)
         # Fujitsu SPARC systems (thanks to Herbert Fruchtl)
         COPTIONS = -Kdalign
         COPTIMIZE = -Kfast_GP=2
-        DEFINES += -DFUJITSU_SOLARIS
+        DEFINES += -DFUJITSU -DFUJITSU_SOLARIS
     endif
 
     ifeq ($(FC),frt)
@@ -516,7 +520,7 @@ ifeq ($(TARGET),SOLARIS)
         # Fujitsu with Parallelnavi compilers
         # If using Fujitsu compilers on Sun hardware, replace -Kfast_GP=2 with
         #  -Kfast
-        DEFINES += -DFUJITSU_SOLARIS -DEXTNAME
+        DEFINES += -DFUJITSU -DFUJITSU_SOLARIS -DEXTNAME
         FOPTIONS = -Kdalign -w -fw -X9 
         FOPTIMIZE = -Kfast_GP=2 
         FDEBUG=
@@ -578,7 +582,7 @@ ifeq ($(TARGET),SOLARIS64)
         # Fujitsu SPARC systems (thanks to Herbert Fruchtl)
         COPTIONS = -Kdalign -KV9FMADD
         COPTIMIZE = -Kfast_GP=2 -KV9FMADD
-        DEFINES += -DFUJITSU_SOLARIS
+        DEFINES += -DFUJITSU -DFUJITSU_SOLARIS
     else
         # SUN/Solaris options for WS6.1
         COPTIONS = -xarch=v9 -dalign
@@ -589,7 +593,7 @@ ifeq ($(TARGET),SOLARIS64)
         # Fujitsu with Parallelnavi compilers
         # If using Fujitsu compilers on Sun hardware, replace -Kfast_GP=2 with
         #  -Kfast
-        DEFINES += -DFUJITSU_SOLARIS -DEXTNAME
+        DEFINES += -DFUJITSU -DEXTNAME -DFUJITSU_SOLARIS
         FOPTIONS = -Kdalign -w -fw -X9  -KV9FMADD
         ifdef USE_I4FLAGS
             FOPTIONS += -CcdLL8
@@ -2087,6 +2091,27 @@ ifneq ($(TARGET),LINUX)
             _FC=xlf
         endif
 
+        ifeq ($(FC),frt)
+            _FC=frt
+        endif
+        ifeq ($(FC),frtpx)
+            _FC=frt
+        endif
+
+        ifeq ($(CC),fcc)
+            _CC=fcc
+        endif
+        ifeq ($(CC),fccpx)
+            _CC=fcc
+        endif
+#cross-compilation
+        ifeq ($(CC),fccpx)
+            _CPU=aarch64
+        endif
+        ifeq ($(FC),frtpx)
+            _CPU=aarch64
+        endif
+
         ifndef _FC
             FC=gfortran
             _FC=gfortran
@@ -2860,7 +2885,7 @@ ifneq ($(TARGET),LINUX)
             endif  # end of gfortran
 
             # A64fx
-            ifeq ($(FC),frt)
+            ifeq ($(_FC),frt)
 
                 DEFINES += -DFUJITSU
                 FOPTIONS += -fs
@@ -3405,7 +3430,12 @@ else
 endif
 
 ifdef NWCHEM_LINK_CUDA
-    CORE_LIBS += -acc -gpu=managed -cuda -cudalib=cublas
+    ifeq ($(_FC),pgf90)
+       CORE_LIBS += -acc -cuda -cudalib=cublas
+    endif
+    ifeq ($(_FC),gfortran)
+       CORE_LIBS +=  -fopenacc -lcublas
+    endif
 endif
 
 
@@ -3574,6 +3604,15 @@ ifdef USE_SIMINT
 endif
 
 
+ifdef BUILD_PLUMED
+    NW_CORE_SUBDIRS += libext
+    PATH := $(NWCHEM_TOP)/src/libext/bin:$(PATH)
+    LD_LIBRARY_PATH := $(NWCHEM_TOP)/src/libext/lib:$(LD_LIBRARY_PATH)
+    DEFINES += -DUSE_PLUMED
+    PLUMED_HOME=$(NWCHEM_TOP)/src/libext
+    PLUMED_DYNAMIC_LIBS=$(shell test -x $(NWCHEM_TOP)/src/libext/bin/plumed && $(NWCHEM_TOP)/src/libext/bin/plumed info --configuration|egrep DYNAMIC_LIBS| cut -c 14-)
+    PLUMED_HASMPI = $(shell test -x $(NWCHEM_TOP)/src/libext/bin/plumed && $(NWCHEM_TOP)/src/libext/bin/plumed info --configuration|grep program_can_run_mpi|cut -c 21-21)
+endif
 ifdef USE_PLUMED
     DEFINES += -DUSE_PLUMED
     #check presence of plumed command. TODO
@@ -3588,19 +3627,58 @@ ifdef USE_PLUMED
     PLUMED_HOME = $(shell plumed info --configuration|egrep prefix=|head -1|cut -c 8-)
     PLUMED_DYNAMIC_LIBS = $(shell plumed info --configuration|egrep DYNAMIC_LIBS| cut -c 14-)
     PLUMED_HASMPI = $(plumed info --configuration|grep program_can_run_mpi|cut -c 21-21)
-    ifeq ($(PLUMED_HASMPI),y)
-        DEFINES += -DPLUMED_HASMPI
-    endif
     #PLUMED_LOAD= /home/edo/tahoma/apps/plumed262.intel20u2/lib/libplumed.a -ldl  -lstdc++ -lfftw3 -lz -ldl -llapack -lblas   -rdynamic -Wl,-Bsymbolic -fopenmp 
-    ifdef PLUMED_DYNAMIC_LIBS
-        EXTRA_LIBS += -L$(PLUMED_HOME)/lib -lplumed $(PLUMED_DYNAMIC_LIBS)
-    else
+    ifndef PLUMED_DYNAMIC_LIBS
         errorplumed:
 	    $(info )
 	    $(info  PLUMED info command not returning the expected output)
 	    $(info  Please file an issue at https://github.com/nwchemgit/nwchem/issues )
 	    $(info )
     endif
+endif
+    ifdef PLUMED_DYNAMIC_LIBS
+        EXTRA_LIBS += -L$(PLUMED_HOME)/lib  -lplumed  $(PLUMED_DYNAMIC_LIBS)
+    endif
+    ifeq ($(PLUMED_HASMPI),y)
+        DEFINES += -DPLUMED_HASMPI
+    endif
+
+
+#TBLITE
+ifeq ("$(wildcard $(NWCHEM_TOP)/src/config/NWCHEM_CONFIG)","")
+    ifeq (xtb, $(findstring xtb, $(NWCHEM_MODULES)))
+        MODULES_HAS_XTB=Y
+    endif
+else
+    MODULES_HAS_XTB = $(shell head -2 $(NWCHEM_TOP)/src/config/NWCHEM_CONFIG| awk '/xtb/ {print "Y"}')
+endif
+
+ifeq ($(MODULES_HAS_XTB),Y)
+    ifndef USE_TBLITE
+        $(error the xtb module requires setting the env variable USE_TBLITE)
+    endif
+endif
+
+ifdef USE_TBLITE
+    ifneq ($(MODULES_HAS_XTB),Y)
+        $(error Add xtb to NWCHEM_MODULES when setting USE_TBLITE )
+    endif
+    DEFINES  += -DUSE_TBLITE
+    EXTRA_LIBS += -L$(NWCHEM_TOP)/src/libext/lib
+    ifdef TBLITE_MESON
+        TBLITE_MODS=$(NWCHEM_TOP)/src/libext/tblite/tblite/_build/libtblite.so.0.2.0.p
+        MCTC_MODS=$(NWCHEM_TOP)/src/libext/tblite/tblite/_build/subprojects/mctc-lib/libmctc-lib.a.p
+        EXTRA_LIBS += -ltblite
+    else
+        EXTRA_LIBS += -ltblite -ltoml-f -ldftd4 -lmulticharge -ls-dftd3 -lmctc-lib
+        TBLITE_MODS=$(NWCHEM_TOP)/src/libext/include/tblite
+        MCTC_MODS=$(sort $(dir $(wildcard $(NWCHEM_TOP)/src/libext/include/mctc-lib/*/)))
+        MCHR_MODS=$(sort $(dir $(wildcard $(NWCHEM_TOP)/src/libext/include/multicharge/*/)))
+        TOMLF_MODS=$(sort $(dir $(wildcard $(NWCHEM_TOP)/src/libext/include/toml-f/*/)))
+        DFTD3_MODS=$(sort $(dir $(wildcard $(NWCHEM_TOP)/src/libext/include/s-dftd3/*/)))
+        DFTD4_MODS=$(sort $(dir $(wildcard $(NWCHEM_TOP)/src/libext/include/dftd4/*/)))
+    endif
+    EXTRA_LIBS += $(LAPACK_LIB) $(BLASOPT)
 endif
 
 # CUDA
@@ -3740,6 +3818,11 @@ ifeq ($(shell echo $(BLASOPT) |awk '/[Ss][Ss][Ll]2[Bb][Ll][Aa][Mm][Pp]/ {print "
 else ifeq ($(shell echo $(BLASOPT) |awk '/[Ss][Ss][Ll]2/ {print "Y"; exit}'),Y)
     DEFINES += -DBLAS_NOTHREADS
 endif
+ifeq ($(shell echo $(BLASOPT) |awk '/lfjlapackex/ {print "Y"; exit}'),Y)
+    DEFINES += -DBLAS_OPENMP
+  else ifeq ($(shell echo $(BLASOPT) |awk '/lfjlapack/ {print "Y"; exit}'),Y)
+    DEFINES += -DBLAS_NOTHREADS
+endif
 
 ifeq ($(shell echo $(BLASOPT) |awk '/lessl/ {print "Y"; exit}'),Y)
     ifeq ($(shell echo $(BLASOPT) |awk '/smp/ {print "Y"; exit}'),Y)
@@ -3757,6 +3840,12 @@ ifeq ($(shell echo $(BLASOPT) |awk '/lessl/ {print "Y"; exit}'),Y)
     CORE_SUBDIRS_EXTRA = lapack
 endif
 
+ifndef BLAS_SIZE
+    LIB_DEFINES += -DUSE_INTEGER8
+endif
+ifeq ($(BLAS_SIZE),8)
+    LIB_DEFINES += -DUSE_INTEGER8
+endif
 
 #
 # Define known suffixes mostly so that .p files don\'t cause pc to be invoked

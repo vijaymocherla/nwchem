@@ -524,10 +524,11 @@ ifdef USE_KNL
     ifeq ($(_CC),icc)
     CFLAGS_FORGA+="-no-vec"
     endif
-    ifeq ($(FC),ftn)
-    MAYBE_HOST=--host=x86_64-pc-linux-gnu 
-    endif
 endif
+ifeq ($(FC),frtpx)
+    MAYBE_HOST=--host=aarch64-pc-linux-gnu
+endif
+
 ifdef USE_OFFLOAD
     MAYBE_OFFLOAD= INTEL_64ALIGN=1
 endif
@@ -650,11 +651,12 @@ ifndef ARMCI_NETWORK
     ARMCI_NETWORK=MPI-TS
     MAYBE_ARMCI = --with-mpi-ts
 endif
-# CUDA UM support
-ifdef NWCHEM_LINK_CUDA
-    MAYBE_ARMCI +=  --enable-cuda-mem
-endif
-#
+
+# CUDA UM support - disabled now that trpdrv_openacc does not need it
+#ifdef NWCHEM_LINK_CUDA
+#    MAYBE_ARMCI +=  --enable-cuda-mem
+#endif
+
 # Apparently weak bindings do not work with CYGWIN64 at the moment. There seems
 # to be an issue with the COFF object format that gets in the way (with ELF
 # this is apparently not a problem). Some details can be found at

@@ -54,6 +54,7 @@ if [[ -z "${NWCHEM_TOP}" ]]; then
 fi
 if [[ ! -z "${BUILD_MPICH}" ]]; then
     export MPIRUN_PATH=$NWCHEM_TOP/src/libext/bin/mpiexec
+    export LD_LIBRARY_PATH=$NWCHEM_TOP/src/libext/lib:$LD_LIBRARY_PATH
 fi
 cd $NWCHEM_TOP/QA
 # A subdirectory of the current directory name testoutputs is made
@@ -318,6 +319,12 @@ do
   fi
 
 #
+# copy the Plumed file
+#
+  PLUMEDFILE=${STUB}.plumed.dat
+  [ -f ${TESTDIR}/${PLUMEDFILE} ] && cp ${TESTDIR}/${PLUMEDFILE} ${SCRATCHDIR}
+
+#
 
 # Run the calculation in the scratch directory
 
@@ -418,6 +425,15 @@ sync
 # Now verify the output
 
     echo -n "     verifying output ... "
+    # check if nga_wait is present in the output
+    grep nga_wait ${STUB}.out > /dev/null
+    if [ $? -eq 0 ]; then
+	echo nga_wait warnings in the output file
+	echo
+	echo Failed
+	echo
+	exit 1
+    fi
 # get rid of HYDRA_DEBUG confusing output
     rm -f hydradebugout.txt
     grep -v proxy:0:0@ ${STUB}.out > hydradebugout.txt
