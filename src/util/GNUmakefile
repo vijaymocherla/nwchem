@@ -148,10 +148,7 @@ endif
 ifneq ($(OLD_GA),)
   EXTRA_OBJ += ga_zgop.o
 endif
-#LIB_DEFINES += -I$(MPI_INCLUDE)
-ifneq ($(MPI_INCLUDE),)
-   LIB_INCLUDES += $(patsubst -I-I%,-I%,-I$(MPI_INCLUDE))
-endif
+
 
 ifdef USE_VTUNE
   EXTRA_OBJ += vtune_bind.o vtune.o
@@ -318,6 +315,17 @@ endif
 
 ifdef USE_OPENACC_TRPDRV
   FOPTIONS += -cuda -DUSE_CUDA_AFFINITY
+endif
+
+ifdef TCE_OPENACC
+  ifeq ($(_FC),pgf90)
+    FOPTIONS += -cuda -acc
+    LIB_DEFINES += -DUSE_CUDA_AFFINITY
+  endif
+  ifeq ($(_FC),gfortran)
+    FOPTIONS += -fopenacc
+    LIB_DEFINES += -DUSE_OPENACC_AFFINITY
+  endif
 endif
 
 ifdef USE_FORTRAN2003

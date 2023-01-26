@@ -31,7 +31,9 @@ if [[ ${UNAME_S} == Linux ]]; then
     CPU_FLAGS_2=$(cat /proc/cpuinfo | grep flags |tail -n 1)
 elif [[ ${UNAME_S} == Darwin ]]; then
     CPU_FLAGS=$(sysctl -n machdep.cpu.features)
-    CPU_FLAGS_2=$(sysctl -n machdep.cpu.leaf7_features)
+    if [[ "$arch" == "x86_64" ]]; then
+	CPU_FLAGS_2=$(sysctl -n machdep.cpu.leaf7_features)
+    fi
 else
     echo Operating system not supported yet
     exit 1
@@ -105,7 +107,7 @@ if [[ -z "${CMAKE}" ]]; then
 	get_cmake_release $cmake_instdir
 	status=$?
 	if [ $status -ne 0 ]; then
-	    echo cmake required to build scalapack
+	    echo cmake required to build simint
 	    echo Please install cmake
 	    echo define the CMAKE env. variable
 	    exit 1
@@ -122,7 +124,7 @@ if ((CMAKE_VER_MAJ < 3)) || (((CMAKE_VER_MAJ > 2) && (CMAKE_VER_MIN < 21))); the
     get_cmake_release $cmake_instdir
     status=$?
     if [ $status -ne 0 ]; then
-	echo cmake required to build scalapack
+	echo cmake 3.21 required to build simint
 	echo Please install cmake
 	echo define the CMAKE env. variable
 	exit 1

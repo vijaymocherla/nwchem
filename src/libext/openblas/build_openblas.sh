@@ -1,21 +1,29 @@
 #!/usr/bin/env bash
 #set -v
 arch=`uname -m`
-VERSION=0.3.20
+VERSION=0.3.21
 #COMMIT=974acb39ff86121a5a94be4853f58bd728b56b81
 BRANCH=develop
 if [ -f  OpenBLAS-${VERSION}.tar.gz ]; then
     echo "using existing"  OpenBLAS-${VERSION}.tar.gz
 else
     rm -rf OpenBLAS*
-    curl -L https://github.com/xianyi/OpenBLAS/archive/v${VERSION}.tar.gz -o OpenBLAS-${VERSION}.tar.gz
+    tries=1 ; until [ "$tries" -ge 6 ] ; do
+		  if [ "$tries" -gt 1 ]; then sleep 9; echo attempt no.  $tries ; fi
+		  curl -L https://github.com/xianyi/OpenBLAS/archive/v${VERSION}.tar.gz -o OpenBLAS-${VERSION}.tar.gz ;
+		  # check tar.gz integrity
+		  gzip -t OpenBLAS-${VERSION}.tar.gz >&  /dev/null
+		  if [ $? -eq 0 ]; then break ;  fi
+		  tries=$((tries+1)) ;  done
 fi
+gzip -t OpenBLAS-${VERSION}.tar.gz >&  /dev/null
+if [ $? -ne 0 ]; then echo  "openBLAS tarball not ready"; rm -f OpenBLAS-${VERSION}.tar.gz; exit 1 ; fi
 tar xzf OpenBLAS-${VERSION}.tar.gz
 ln -sf OpenBLAS-${VERSION} OpenBLAS
 cd OpenBLAS
 # patch for apple clang -fopenmp
-patch -p0 -s -N < ../clang_omp.patch
-patch -p0 -s -N < ../icc_avx512.patch
+patch -p0 -s -N < ../makesys.patch
+#patch -p0 -s -N < ../icc_avx512.patch
 # patch for pgi/nvfortran missing -march=armv8
 patch -p0 -s -N < ../arm64_fopt.patch
 if [[  -z "${FORCETARGET}" ]]; then
@@ -26,7 +34,9 @@ if [[ ${UNAME_S} == Linux ]]; then
     CPU_FLAGS_2=$(cat /proc/cpuinfo | grep flags |tail -n 1)
 elif [[ ${UNAME_S} == Darwin ]]; then
     CPU_FLAGS=$(/usr/sbin/sysctl -n machdep.cpu.features)
+    if [[ "$arch" == "x86_64" ]]; then
     CPU_FLAGS_2=$(/usr/sbin/sysctl -n machdep.cpu.leaf7_features)
+    fi
 fi
   GOTSSE2=$(echo ${CPU_FLAGS}   | tr  'A-Z' 'a-z'| awk ' /sse2/   {print "Y"}')
    GOTAVX=$(echo ${CPU_FLAGS}   | tr  'A-Z' 'a-z'| awk ' /avx/    {print "Y"}')
@@ -46,6 +56,9 @@ if [[ "${GOTAVX512}" == "Y" ]]; then
     FORCETARGET=" TARGET=HASWELL "
 fi
 fi #FORCETARGET
+if [[ "$arch" == "riscv64" ]]; then
+	 FORCETARGET=" TARGET=RISCV64_GENERIC "
+fi
 if [[  -z "${BLAS_SIZE}" ]]; then
    BLAS_SIZE=8
 fi
@@ -60,8 +73,10 @@ if [[ "${NWCHEM_TARGET}" == "LINUX" ]]; then
 else
   binary=64
 fi
-if [ -n "${USE_DYNAMIC_ARCH}" ]; then
-    FORCETARGET+="DYNAMIC_ARCH=1 DYNAMIC_OLDER=1"
+if [[ -n "${USE_DYNAMIC_ARCH}" ]] || [[ "${USE_HWOPT}" == "n" ]]; then
+    if [[ "$arch" == "x86_64" ]]; then
+	FORCETARGET+="DYNAMIC_ARCH=1 DYNAMIC_OLDER=1"
+    fi
 fi
 #cray ftn wrapper
 if [[ ${FC} == ftn ]]; then
@@ -130,7 +145,22 @@ elif  [[ -n ${FC} ]] && [[ "${FC}" == "ifort" ]] || [[ "${FC}" == "ifx" ]]; then
     FORCETARGET+=' F_COMPILER=INTEL '
     LAPACK_FPFLAGS_VAL=" -fp-model source -O2 -g "
 else
+	#assuming gfortran
+    FORCETARGET+=' F_COMPILER=GFORTRAN '
     LAPACK_FPFLAGS_VAL=" "
+        if [[ ${BLAS_SIZE} == 8 ]]; then
+           LAPACK_FPFLAGS_VAL+=" -fdefault-integer-8"
+       fi
+fi
+if  [[ -n ${CC} ]] && [[ "${CC}" == "amdclang" ]]; then
+    let VERSIONEQ15=$(expr `${CC} -dM -E - < /dev/null 2> /dev/null|egrep 15|grep __clang_major__ |cut  -d ' ' -f 3 ` \= 15)
+    if [[ ${VERSIONEQ15} == 1 ]]; then
+       echo "amdclang 15 buggy. reduced optimization to O1"
+       FORCETARGET+=' COMMON_OPT=-O1'
+    fi
+fi
+if [[   -z "${FC}" ]]; then
+    FC=gfortran
 fi
 if [[   -z "${CC}" ]]; then
     CC=cc
@@ -155,7 +185,7 @@ fi
 
 #disable threading for ppc64le since it uses OPENMP
 echo arch is "$arch"
-if [[ "$arch" == "ppc64le" ]]; then
+if [[ "$arch" == "ppc64le" ||  "$arch" == "riscv64" ]]; then
 if [[ ${GCCVERSIONGT5} != 1 ]]; then
        echo
        echo gcc version 6 and later needed for ppc64le
@@ -165,8 +195,17 @@ if [[ ${GCCVERSIONGT5} != 1 ]]; then
        exit 1
 fi
     THREADOPT="0"
+    MYNTS="1"
 else
     THREADOPT="1"
+    MYNTS="128"
+fi
+# cross compilation
+GOTMINGW64=$("$CC" -dM -E - </dev/null 2> /dev/null |grep MINGW64|cut -c21)
+if [[ "${GOTMINGW64}" == "1" ]]; then
+    FORCETARGET+=HOSTCC=\"gcc\"
+    THREADOPT="0"
+    MYNTS="1"
 fi
 
 #we want openblas to use pthreads and not openmp.
@@ -176,15 +215,16 @@ if [[  ! -z "${USE_OPENMP}" ]]; then
     unset USE_OPENMP
     NWCHEM_USE_OPENMP=1
 fi
-echo make $FORCETARGET LAPACK_FPFLAGS=$LAPACK_FPFLAGS_VAL  INTERFACE64=$sixty4_int BINARY=$binary NUM_THREADS=128 NO_CBLAS=1 NO_LAPACKE=1 DEBUG=0 USE_THREAD=$THREADOPT  libs netlib -j4
+echo FC is $FC
+echo make FC=$FC $FORCETARGET LAPACK_FPFLAGS=$LAPACK_FPFLAGS_VAL  INTERFACE64=$sixty4_int BINARY=$binary NUM_THREADS=$MYNTS NO_CBLAS=1 NO_LAPACKE=1 DEBUG=0 USE_THREAD=$THREADOPT  libs netlib -j4
 echo
 echo OpenBLAS compilation in progress
 echo output redirected to libext/openblas/OpenBLAS/openblas.log
 echo
 if [[ ${_FC} == xlf ]]; then
- make FC="xlf -qextname" $FORCETARGET  LAPACK_FPFLAGS="$LAPACK_FPFLAGS_VAL"  INTERFACE64="$sixty4_int" BINARY="$binary" NUM_THREADS=128 NO_CBLAS=1 NO_LAPACKE=1 DEBUG=0 USE_THREAD="$THREADOPT" libs netlib -j4 >& openblas.log
+ make FC="xlf -qextname" $FORCETARGET  LAPACK_FPFLAGS="$LAPACK_FPFLAGS_VAL"  INTERFACE64="$sixty4_int" BINARY="$binary" NUM_THREADS=$MYNTS NO_CBLAS=1 NO_LAPACKE=1 DEBUG=0 USE_THREAD="$THREADOPT" libs netlib -j4 >& openblas.log
 else
- make $FORCETARGET  LAPACK_FPFLAGS="$LAPACK_FPFLAGS_VAL"  INTERFACE64="$sixty4_int" BINARY="$binary" NUM_THREADS=128 NO_CBLAS=1 NO_LAPACKE=1 DEBUG=0 USE_THREAD="$THREADOPT" libs netlib -j4 >& openblas.log
+ make FC=$FC $FORCETARGET  LAPACK_FPFLAGS="$LAPACK_FPFLAGS_VAL"  INTERFACE64="$sixty4_int" BINARY="$binary" NUM_THREADS=128 NO_CBLAS=1 NO_LAPACKE=1 DEBUG=0 USE_THREAD="$THREADOPT"  libs netlib -j4 >& openblas.log
 fi
 if [[ "$?" != "0" ]]; then
     tail -500 openblas.log
