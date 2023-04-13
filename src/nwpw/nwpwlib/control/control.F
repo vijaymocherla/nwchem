@@ -5513,6 +5513,31 @@ c      end if
       return
       end
 
+*     ***********************************
+*     *                                 *
+*     *    control_kbpp_filter_scale    *
+*     *                                 *
+*     ***********************************
+      real*8 function control_kbpp_filter_scale()
+      implicit none
+
+#include "bafdecls.fh"
+#include "btdb.fh"
+      
+*     **** control_rtdb common block ****
+      integer rtdb
+      common / control_rtdb1 / rtdb
+      
+      real*8 scal
+
+      scal = 1.0d0
+      if (.not.btdb_get(rtdb,'nwpw:kbpp_filter_scale',mt_dbl,1,scal))
+     >  scal=1.0d0
+      
+      control_kbpp_filter_scale = scal
+      return
+      end
+
 
 *     ***********************************
 *     *                                 *
@@ -7500,3 +7525,32 @@ ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
       control_single_precision_on = single_precision_on
       return
       end
+
+
+
+*     ***********************************
+*     *                                 *
+*     *        control_CI_cg_thresh     *
+*     *                                 *
+*     ***********************************
+      real*8 function control_CI_cg_thresh()
+      implicit none
+
+#include "bafdecls.fh"
+#include "btdb.fh"
+
+*     **** control_rtdb common block ****
+      integer rtdb
+      common / control_rtdb1 / rtdb
+
+      real*8 thresh
+
+      thresh = 1.5d0 
+      if (.not.btdb_get(rtdb,'nwpw:CI_cg_thresh',mt_dbl,1,thresh))
+     >   thresh = 1.5d0
+
+      control_CI_cg_thresh = thresh
+      return
+      end
+
+

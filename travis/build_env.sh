@@ -29,6 +29,13 @@ echo DISTR is "$DISTR"
 #  HOMEBREW_NO_AUTO_UPDATE=1 brew cask uninstall oclint || true  
 #  HOMEBREW_NO_INSTALL_CLEANUP=1  HOMEBREW_NO_AUTO_UPDATE=1 brew install gcc "$MPI_IMPL" openblas python3 ||true
      HOMEBREW_NO_INSTALL_CLEANUP=1  HOMEBREW_NO_AUTO_UPDATE=1 brew install gcc "$MPI_IMPL" python3 gsed grep automake autoconf ||true
+     if [[ "$FC" != "gfortran" ]]; then
+	 #install non default gfortran, ie gfortran-9
+	 #get version
+	 mygccver=$(echo "$FC"|cut -d - -f 2)
+	 echo mygccver is "$mygccver"
+	 HOMEBREW_NO_INSTALL_CLEANUP=1  HOMEBREW_NO_AUTO_UPDATE=1 brew reinstall gcc@"$mygccver" || true
+     fi
      #hack to fix Github actions mpif90
      gccver=`brew list --versions gcc| head -1 |cut -c 5-`
      echo brew gccver is $gccver
@@ -182,7 +189,7 @@ if [[ "$os" == "Linux" ]]; then
 	fi
 	if [[ "$FC" == "flang" ]]; then
 	    if [[ "USE_AOMP" == "Y" ]]; then
-		aomp_major=14
+		aomp_major=16
 		aomp_minor=0-3
 		wget -nv https://github.com/ROCm-Developer-Tools/aomp/releases/download/rel_"$aomp_major"."$aomp_minor"/aomp_Ubuntu2004_"$aomp_major"."$aomp_minor"_amd64.deb
 		sudo dpkg -i aomp_Ubuntu2004_"$aomp_major"."$aomp_minor"_amd64.deb
@@ -192,7 +199,8 @@ if [[ "$os" == "Linux" ]]; then
 	    else
 		aocc_version=4.0.0
 		aocc_dir=aocc-compiler-${aocc_version}
-		curl -sS -LJO https://developer.amd.com/wordpress/media/files/${aocc_dir}.tar
+#		curl -sS -LJO https://developer.amd.com/wordpress/media/files/${aocc_dir}.tar
+		curl -sS -LJO https://download.amd.com/developer/eula/aocc-compiler/${aocc_dir}.tar
 		tar xf ${aocc_dir}.tar
 		./${aocc_dir}/install.sh
 		source setenv_AOCC.sh
@@ -203,7 +211,7 @@ if [[ "$os" == "Linux" ]]; then
 	fi
 	if [[ "$FC" == "amdflang" ]]; then
 	    sudo apt-get install -y wget gnupg2 coreutils dialog tzdata
-	    rocm_version=5.4.1
+	    rocm_version=5.4.3
 	    wget -q -O - https://repo.radeon.com/rocm/rocm.gpg.key |  sudo apt-key add -
 	    echo 'deb [arch=amd64] https://repo.radeon.com/rocm/apt/'$rocm_version'/ ubuntu main' | sudo tee /etc/apt/sources.list.d/rocm.list
 	    sudo apt-get  update -y && sudo apt-get -y install rocm-llvm openmp-extras
@@ -214,8 +222,8 @@ if [[ "$os" == "Linux" ]]; then
 	fi
 	if [[ "$FC" == "nvfortran" ]]; then
 	    sudo apt-get -y install lmod g++ libtinfo5 libncursesw5 lua-posix lua-filesystem lua-lpeg lua-luaossl
-	    nv_major=22
-	    nv_minor=11
+	    nv_major=23
+	    nv_minor=3
 	    nverdot="$nv_major"."$nv_minor"
 	    nverdash="$nv_major"-"$nv_minor"
 	    arch_dpkg=`dpkg --print-architecture`

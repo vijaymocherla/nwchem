@@ -85,7 +85,7 @@ jobs:
             use_simint: 1
             use_openmp: 2
             use_tblite: 1
-            branch: release-7-2-0
+            branch: hotfix/release-7-2-0
           - os: [self-hosted, oracle_linux]
             experimental: false
             mpi_impl: mpich
@@ -96,7 +96,7 @@ jobs:
             use_libxc: 1
             use_openmp: 2
             use_tblite: 1
-            branch: release-7-2-0
+            branch: hotfix/release-7-2-0
       fail-fast: false
     env:
         MPI_IMPL: ${{ matrix.mpi_impl }}
@@ -164,8 +164,11 @@ jobs:
           export TRAVIS_BUILD_DIR=`pwd`
           unset USE_SIMINT
           mytee=tee
-          if  [[ `uname -s` == "Darwin" ]]; then mytee=gtee; fi
-          source travis/nwchem.bashrc; cd QA && ./doqmtests.mpi 3 | $mytee >(ts "%d%b%Y %H:%M:%S" > ../../../../doqmtests.mpi.log.` date +%b%d%Y_%H:%M`)
+          if  [[ `uname -s` == "Darwin" ]]; then mytee=gtee; dist=Darwin; fi
+          if  test -f "/usr/lib/os-release"; then dist=$(grep ID= /etc/os-release |grep -v VERSION|head -1 |cut -c4-| sed 's/\"//g') ; fi
+          if [[ $dist == "fedora" ]]; then nprocs=2; else nprocs=3 ;fi
+          echo nprocs is $nprocs
+          source travis/nwchem.bashrc; cd QA && ./doqmtests.mpi $nprocs | $mytee >(ts "%d%b%Y %H:%M:%S" > ../../../../doqmtests.mpi.log.` date +%b%d%Y_%H:%M`)
         shell: bash
       - name: Check if QA testing has failed
         if: ${{ failure() }} &&  steps.qa_test.outcome == 'failure'

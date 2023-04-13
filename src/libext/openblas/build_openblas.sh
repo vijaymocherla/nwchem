@@ -26,6 +26,7 @@ patch -p0 -s -N < ../makesys.patch
 #patch -p0 -s -N < ../icc_avx512.patch
 # patch for pgi/nvfortran missing -march=armv8
 patch -p0 -s -N < ../arm64_fopt.patch
+patch -p1 -s -N < ../9402df5604e69f86f58953e3883f33f98c930baf.patch
 if [[  -z "${FORCETARGET}" ]]; then
 FORCETARGET=" "
 UNAME_S=$(uname -s)
@@ -35,7 +36,11 @@ if [[ ${UNAME_S} == Linux ]]; then
 elif [[ ${UNAME_S} == Darwin ]]; then
     CPU_FLAGS=$(/usr/sbin/sysctl -n machdep.cpu.features)
     if [[ "$arch" == "x86_64" ]]; then
-    CPU_FLAGS_2=$(/usr/sbin/sysctl -n machdep.cpu.leaf7_features)
+#	CPU_FLAGS_2=$(/usr/sbin/sysctl -n machdep.cpu.leaf7_features)
+	if [[ $(/usr/sbin/sysctl -n hw.optional.avx2_0) == 1 ]]; then
+	    echo got AVX2
+	    CPU_FLAGS_2="AVX2"
+	fi
     fi
 fi
   GOTSSE2=$(echo ${CPU_FLAGS}   | tr  'A-Z' 'a-z'| awk ' /sse2/   {print "Y"}')
@@ -215,16 +220,23 @@ if [[  ! -z "${USE_OPENMP}" ]]; then
     unset USE_OPENMP
     NWCHEM_USE_OPENMP=1
 fi
+GOTFREEBSD=$(uname -o 2>&1|awk ' /FreeBSD/ {print "1";exit}')
+MYMAKE=make
+MAKEJ=" -j4"
+if [[  "${GOTFREEBSD}" == 1 ]]; then
+MAKEJ=" "
+MYMAKE=gmake
+fi
 echo FC is $FC
-echo make FC=$FC $FORCETARGET LAPACK_FPFLAGS=$LAPACK_FPFLAGS_VAL  INTERFACE64=$sixty4_int BINARY=$binary NUM_THREADS=$MYNTS NO_CBLAS=1 NO_LAPACKE=1 DEBUG=0 USE_THREAD=$THREADOPT  libs netlib -j4
+echo $MYMAKE FC=$FC $FORCETARGET LAPACK_FPFLAGS=$LAPACK_FPFLAGS_VAL  INTERFACE64=$sixty4_int BINARY=$binary NUM_THREADS=$MYNTS NO_CBLAS=1 NO_LAPACKE=1 DEBUG=0 USE_THREAD=$THREADOPT  libs netlib $MAKEJ
 echo
 echo OpenBLAS compilation in progress
 echo output redirected to libext/openblas/OpenBLAS/openblas.log
 echo
 if [[ ${_FC} == xlf ]]; then
- make FC="xlf -qextname" $FORCETARGET  LAPACK_FPFLAGS="$LAPACK_FPFLAGS_VAL"  INTERFACE64="$sixty4_int" BINARY="$binary" NUM_THREADS=$MYNTS NO_CBLAS=1 NO_LAPACKE=1 DEBUG=0 USE_THREAD="$THREADOPT" libs netlib -j4 >& openblas.log
+ $MYMAKE FC="xlf -qextname" $FORCETARGET  LAPACK_FPFLAGS="$LAPACK_FPFLAGS_VAL"  INTERFACE64="$sixty4_int" BINARY="$binary" NUM_THREADS=$MYNTS NO_CBLAS=1 NO_LAPACKE=1 DEBUG=0 USE_THREAD="$THREADOPT" libs netlib $MAKEJ >& openblas.log
 else
- make FC=$FC $FORCETARGET  LAPACK_FPFLAGS="$LAPACK_FPFLAGS_VAL"  INTERFACE64="$sixty4_int" BINARY="$binary" NUM_THREADS=128 NO_CBLAS=1 NO_LAPACKE=1 DEBUG=0 USE_THREAD="$THREADOPT"  libs netlib -j4 >& openblas.log
+ $MYMAKE FC=$FC $FORCETARGET  LAPACK_FPFLAGS="$LAPACK_FPFLAGS_VAL"  INTERFACE64="$sixty4_int" BINARY="$binary" NUM_THREADS=128 NO_CBLAS=1 NO_LAPACKE=1 DEBUG=0 USE_THREAD="$THREADOPT"  libs netlib $MAKEJ >& openblas.log
 fi
 if [[ "$?" != "0" ]]; then
     tail -500 openblas.log
@@ -235,6 +247,9 @@ if [[ "$?" != "0" ]]; then
 fi
 
 mkdir -p ../../lib
+if [[ $(uname -s) == "Linux" ]]; then
+    strip --strip-debug libopenblas*-*.a
+fi
 cp libopenblas.a ../../lib/libnwc_openblas.a
 #make PREFIX=. install
 if [[  ! -z "${NWCHEM_USE_OPENMP}" ]]; then

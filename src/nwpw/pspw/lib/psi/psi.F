@@ -861,8 +861,8 @@ c     >           dcpl_mb(psi1(1)),1)
 #include "stdio.fh"
 #include "psi.fh"
 
-      real*8 Hgg
-      common / CI_Hgg_common / Hgg
+      real*8 Hgg,H1gg,H2gg
+      common / CI_Hgg_common / Hgg,H1gg,H2gg
       
       !*** local variables ***
       integer taskid,MASTER
@@ -888,7 +888,8 @@ c     >           dcpl_mb(psi1(1)),1)
       oprint= ((taskid.eq.MASTER).and.control_print(print_medium))
 
       !*** need to redo cr_fft of psi1 ***
-      if (ci_algorithm.ge.5) call electron_gen_psi_r(dcpl_mb(psi1(1)))
+*     *** Duo0130 ***
+      !if (ci_algorithm.ge.5) call electron_gen_psi_r(dcpl_mb(psi1(1)))
 
       Hgg = 0.0d0
 
@@ -1064,7 +1065,7 @@ c      end if
       real*8 theta,ep,sp,e0old
       integer r1(2),t0(2),t(2),g(2),psig_r(2),psie_r(2)
       integer rhog(2),rhoe(2),rhoge(2),vcgg(2),vcge(2),vcee(2)
-      integer vc(2),vctmp(2),te(2),vcc(2)
+      integer vc(2),vctmp(2),tg(2),te(2),vcc(2)
       integer psig_ptr,psie_ptr,psig_homo(2),hpsig(2),hpsie(2)
       integer hpsig_r(2),hpsie_r(2)
       real*8  Sgg,Sge,See
@@ -1072,12 +1073,12 @@ c      end if
       real*8  H2gg,H2ge,H2ee
       real*8  Hgg,Hge,Hee
       real*8  scal1,scal2,dv,ehartr
-      real*8  A,B,C,Elow,Ehigh,c1,c2,lmbda,sum,sigma
+      real*8  A,B,C,Elow,Ehigh,c1,c2,lmbda,sum,sigma,thresh
 
       logical  control_print
       external control_print
-      real*8   control_Ep,control_Sp,lattice_omega
-      external control_Ep,control_Sp,lattice_omega
+      real*8   control_Ep,control_Sp,lattice_omega,control_CI_cg_thresh
+      external control_Ep,control_Sp,lattice_omega,control_CI_cg_thresh
       integer  electron_psi_r_ptr
       external electron_psi_r_ptr
 
@@ -1094,6 +1095,8 @@ c      end if
       scal2 = 1.0d0/lattice_omega()
       dv = scal1*lattice_omega()
 
+      thresh = control_CI_cg_thresh()
+
       call D3dB_n2ft3d(1,n2ft3d)
 
       value = BA_push_get(mt_dcpl,npack1,'t0',t0(2),t0(1))
@@ -1103,6 +1106,8 @@ c      end if
      >        BA_push_get(mt_dcpl,npack1,'g',g(2),g(1))
       value = value.and.
      >        BA_push_get(mt_dcpl,npack1,'t',t(2),t(1))
+      value = value.and.
+     >        BA_push_get(mt_dcpl,npack1,'tg',tg(2),tg(1))
       value = value.and.
      >        BA_push_get(mt_dcpl,npack1,'te',te(2),te(1))
 
@@ -1190,7 +1195,7 @@ cc      end if
      >                        dcpl_mb(psie_ptr),
      >                        dbl_mb(psie_r(1)),
      >                        eci,dcpl_mb(g(1)),
-     >                        dcpl_mb(t(1)),
+     >                        dcpl_mb(tg(1)),
      >                        dcpl_mb(te(1)),
      >                        dbl_mb(rhog(1)),
      >                        dbl_mb(rhoge(1)),
@@ -1245,7 +1250,7 @@ cc      end if
      >                          dcpl_mb(psie_ptr),
      >                          dbl_mb(psie_r(1)),
      >                          eci,dcpl_mb(g(1)),
-     >                          dcpl_mb(t(1)),
+     >                          dcpl_mb(tg(1)),
      >                          dcpl_mb(te(1)),
      >                          dbl_mb(rhog(1)),
      >                          dbl_mb(rhoge(1)),
@@ -1284,16 +1289,16 @@ c     >   write(*,*) "orb,it,eci,eold,eci-eold=",ii,it,eci,eold,eci-eold
          call psi_project_out_virtual(ii,dcpl_mb(r1(1)))
 
 *        *** determine conjuagate direction ***
-         call Pack_cc_dot(1,dcpl_mb(r1(1)),
-     >                   dcpl_mb(r1(1)),
-     >                   lmbda_r1)
+        call Pack_cc_dot(1,dcpl_mb(r1(1)),
+     >                     dcpl_mb(r1(1)),
+     >                     lmbda_r1)
 
          call Pack_c_Copy(1,dcpl_mb(r1(1)),dcpl_mb(t(1)))
 
-         if (it.gt.1) then
+         if ((it.gt.1).and.((lmbda_r1/lmbda_r0).lt.thresh))  then
             call Pack_cc_daxpy(1,(lmbda_r1/lmbda_r0),
-     >                      dcpl_mb(t0(1)),
-     >                      dcpl_mb(t(1)))
+     >                           dcpl_mb(t0(1)),
+     >                           dcpl_mb(t(1)))
          end if
          lmbda_r0 = lmbda_r1
          oneloop = .true.
@@ -1308,22 +1313,22 @@ c     >   write(*,*) "orb,it,eci,eold,eci-eold=",ii,it,eci,eold,eci-eold
 
 *        **** compute de0 = <t|g> ****
          call Pack_cc_dot(1,dcpl_mb(t(1)),
-     >                      dcpl_mb(g(1)),
+     >                      dcpl_mb(r1(1)),
      >                      de0)
 
 *        *** bad direction ***
          if ((de0.lt.0.0d0).and.oneloop) then
-           call Pack_c_Copy(1,dcpl_mb(g(1)),dcpl_mb(t(1)))
+           call Pack_c_Copy(1,dcpl_mb(r1(1)),dcpl_mb(t(1)))
            oneloop = .false.
            go to 3
          end if
 
          call psi_linesearch_CI_virtual(ci_algorithm,maxit_ls,
-     >                                   ii,theta,eci,de0,dcpl_mb(t(1)),
+     >                                  ii,theta,eci,de0,dcpl_mb(t(1)),
      >                                  dcpl_mb(psig_ptr),
      >                                  dbl_mb(psig_r(1)),
      >                                  dbl_mb(psie_r(1)),
-     >                                  dcpl_mb(r1(1)),dcpl_mb(te(1)),
+     >                                  dcpl_mb(tg(1)),dcpl_mb(te(1)),
      >                                  dbl_mb(rhog(1)),
      >                                  dbl_mb(rhoe(1)),
      >                                  dbl_mb(rhoge(1)),
@@ -1382,6 +1387,7 @@ cc      end if
       value = value.and.BA_pop_stack(psie_r(2))
       value = value.and.BA_pop_stack(psig_r(2))
       value = value.and.BA_pop_stack(te(2))
+      value = value.and.BA_pop_stack(tg(2))
       value = value.and.BA_pop_stack(t(2))
       value = value.and.BA_pop_stack(g(2))
       value = value.and.BA_pop_stack(r1(2))
@@ -1900,12 +1906,14 @@ c      end
       real*8 Hgg,Hge,Hee
       real*8 ehartr,scal1,scal2,dv,Elow,Ehigh,lmbda,sum1
       real*8 ehfx,phfx,Eion
+      character*50  filename
+      character*255 full_filename
+
+*     **** external functions ****
       integer  control_version
       external control_version
       real*8   coulomb_e,ewald_e,ion_ion_e
       external coulomb_e,ewald_e,ion_ion_e
-
-*     **** external functions ****
       real*8   lattice_omega
       external lattice_omega
 
@@ -1936,7 +1944,10 @@ c      end
       if (control_version().eq.3) Eion = ewald_e()   !**** get ewald energy ****
       if (control_version().eq.4) Eion = ion_ion_e() !**** get free-space ion-ion energy ****
       if (taskid.eq.MASTER) then
-         open(unit=103,file="ion_ion.dat")
+         filename = "ion_ion.dat"
+         call util_file_name_noprefix(filename,.false.,.false.,
+     >                                full_filename)
+         open(unit=103,file=full_filename,form="formatted")
          write(103,*) Eion
          close(103)
       end if
@@ -2153,8 +2164,8 @@ c        call D3dB_rr_daxpy(1,(-2.0d0*c1*c2),vcge,vcee)
 #include "util.fh"
 #include "stdio.fh"
 
-      real*8 Hgg
-      common / CI_Hgg_common / Hgg
+      real*8 Hgg,H1gg,H2gg
+      common / CI_Hgg_common / Hgg,H1gg,H2gg
 
 *     **** local variables ****
       integer MASTER,taskid
@@ -2163,11 +2174,13 @@ c        call D3dB_rr_daxpy(1,(-2.0d0*c1*c2),vcge,vcee)
       integer neq1(2),i,q,ms,n1q(2),n2q(2)
       integer nx,ny,nz,n2ft3d
       real*8 Sgg,Sge,See,A,B,C,c1,c2
-      real*8 H1gg,H1ge,H1ee
-      real*8 H2gg,H2ge,H2ee
+      real*8 H1ge,H1ee
+      real*8 H2ge,H2ee
       real*8 Hge,Hee
       real*8 ehartr,scal1,scal2,dv,Elow,Ehigh,lmbda,sum1
       real*8 ehfx,phfx,Eion
+      character*50  filename
+      character*255 full_filename
 
 *     **** external functions ****
       real*8   lattice_omega
@@ -2212,7 +2225,10 @@ c      oprint = .true.
       if (control_version().eq.4) Eion = ion_ion_e() !**** get free-space ion-ion energy ****
       if (oprint) write(*,*) "Eion=",Eion
       if (taskid.eq.MASTER) then
-         open(unit=103,file="ion_ion.dat")
+         filename = "ion_ion.dat"
+         call util_file_name_noprefix(filename,.false.,.false.,
+     >                                full_filename)
+         open(unit=103,file=full_filename,form="formatted")
          write(103,*) Eion
          close(103)
       end if
@@ -2544,6 +2560,8 @@ c
       real*8 Hci(3,3),Eci(3),wkopt(1),work(999)
       !real*8 Hci(2,2),Eci(2),wkopt(1),work(999)
       integer lwork,INFO
+      character*50  filename
+      character*255 full_filename
 
 *     **** external functions ****
       real*8   lattice_omega
@@ -2581,7 +2599,10 @@ c     end if
       if (control_version().eq.4) Eion = ion_ion_e() !**** get free-space ion-ion energy ****
       if (oprint) write(*,*) "Eion=",Eion
       if (taskid.eq.MASTER) then
-         open(unit=103,file="ion_ion.dat")
+         filename = "ion_ion.dat"
+         call util_file_name_noprefix(filename,.false.,.false.,
+     >                                full_filename)
+         open(unit=103,file=full_filename,form="formatted")
          write(103,*) Eion
          close(103)
       end if
@@ -2990,8 +3011,8 @@ c
 #include "util.fh"
 #include "stdio.fh"
 
-c     real*8 Hgg
-c     common / CI_Hgg_common / Hgg
+      real*8 Hgg,H1gg,H2gg
+      common / CI_Hgg_common / Hgg,H1gg,H2gg
 
 *     **** local variables ****
       integer MASTER,taskid
@@ -3000,13 +3021,15 @@ c     common / CI_Hgg_common / Hgg
       integer neq1(2),i,q,ms,n1q(2),n2q(2)
       integer nx,ny,nz,n2ft3d
       real*8 Sgg,Sge,See,c1,c2,c3,A,B,C
-      real*8 H1gg,H1ge,H1gm,H1eg,H1ee,H1em,H1mg,H1me,H1mm
-      real*8 H2gg,H2ge,H2gm,H2eg,H2ee,H2em,H2mg,H2me,H2mm
-      real*8 Hgg,Hge,Hgm,Heg,Hee,Hem,Hmg,Hme,Hmm
+      real*8 H1ge,H1gm,H1eg,H1ee,H1em,H1mg,H1me,H1mm
+      real*8 H2ge,H2gm,H2eg,H2ee,H2em,H2mg,H2me,H2mm
+      real*8 Hge,Hgm,Heg,Hee,Hem,Hmg,Hme,Hmm
       real*8 ehartr,scal1,scal2,dv,Elow,Ehigh,lmbda,sum1
       real*8 ehfx,phfx,Eion
       real*8 Hci(3,3),Eci(3),wkopt(1),work(999)
       integer lwork,INFO
+      character*50  filename
+      character*255 full_filename
 
 *     **** external functions ****
       real*8   lattice_omega
@@ -3041,7 +3064,10 @@ c      oprint = .true.
       if (control_version().eq.4) Eion = ion_ion_e() !**** get free-space ion-ion energy ****
       if (oprint) write(*,*) "Eion=",Eion
       if (taskid.eq.MASTER) then
-         open(unit=103,file="ion_ion.dat")
+         filename = "ion_ion.dat"
+         call util_file_name_noprefix(filename,.false.,.false.,
+     >                                full_filename)
+         open(unit=103,file=full_filename,form="formatted")
          write(103,*) Eion
          close(103)
       end if
@@ -3132,6 +3158,10 @@ c      oprint = .true.
       end if
 
 *     *** generate <g|H|m> ***
+      call psi_H1psi(ispin,neq,npack1,n2ft3d,psig,psig_r,hpsig)
+      call Pack_c_Copy(1,hpsig,h1psig)
+      call pspw_et_gen_rho(ispin,neq,n2ft3d,psig_r,rhogg)
+
       H1gm=0.0d0
       call psi_H1psi(ispin,neq1,npack1,n2ft3d,psilumo,psilumo_r,h1psie)
       call Pack_cc_dot(1,psihomo,h1psie,H1gm)
@@ -3206,8 +3236,8 @@ c      oprint = .true.
          call D3dB_cr_fft3b(1,vcc)
          call D3dB_r_Copy(1,vcc,vcee)
          call D3dB_r_nZero(1,neq(1)+neq(2),hpsig_r)
-         call pspw_potential_HFX(ispin,psie_r,hpsig_r)
-         call pspw_energy_HFX(ispin,psie_r,ehfx,phfx)
+         call pspw_potential_HFX(ispin,psig_r,hpsig_r)
+         call pspw_energy_HFX(ispin,psig_r,ehfx,phfx)
          H2ee = H2ee + ehfx
          Hee = H1ee + H2ee + Eion
       end if
@@ -3221,7 +3251,7 @@ c      oprint = .true.
          H2em = dsqrt(2.0d0)*0.5d0*(0.5d0*ehartr*dv)
          Hem = H1em + H2em
       else
-         call pspw_et_gen_rho(ispin,neq,n2ft3d,psie_r,rhoee)
+         call pspw_et_gen_rho(ispin,neq,n2ft3d,psig_r,rhoee)
          call D3dB_rr_dot(1,rhoee,vcge,H2em)
          H2em = dsqrt(2.0d0)*(0.50d0*H2em*dv)
          Hem = H1em + H2em
@@ -3303,6 +3333,8 @@ c      oprint = .true.
 
 *     **** generate dElow/dpsie ****
       if (control_version().eq.4) then
+         call coulomb2_v(rhogg,vcgg)
+
          call D3dB_r_Copy(1,vcee,vc)
          call D3dB_rr_Mul2(1,psilumo_r,vc)
          call D3dB_rr_Sum2(1,hpsie_r,vc)
@@ -3362,7 +3394,10 @@ c      oprint = .true.
          call D3dB_cr_fft3b(1,vcc)
          call D3dB_rr_daxpy(1,-0.5d0,vcc,vcgg)
 
-         call pspw_et_gen_rho(ispin,neq,n2ft3d,psie_r,rhoee)
+         call Pack_c_Copy(1,psilumo,psig)
+         call D3dB_r_Copy(1,psilumo_r,psig_r)
+         call pspw_et_gen_rho(ispin,neq,n2ft3d,psig_r,rhoee)
+
          call D3dB_r_SMul1(1,scal1,rhoee)
          call D3dB_rc_fft3f(1,rhoee)
          call Pack_c_pack(0,rhoee)
@@ -3410,6 +3445,11 @@ c      oprint = .true.
          call D3dB_rr_daxpy(1,(-2.0d0*c3*c3),vctmp,vc)
 
          call D3dB_rr_daxpy(1,(2.0d0*c3*c3),hpsie_r,vc)
+
+         call Pack_c_Copy(1,psihomo,psig)
+         call D3dB_r_Copy(1,psihomo_r,psig_r)
+         call Pack_c_Copy(1,psilumo,psie)
+         call D3dB_r_Copy(1,psilumo_r,psie_r)
       end if
 
       call D3dB_rc_fft3f(1,vc)
@@ -3827,6 +3867,9 @@ c     write(*,*) ciE(1),ciE(2),ciE(3),ciE(4)
 
       return
       end
+
+
+
 
 
 
@@ -11950,6 +11993,8 @@ ccccccccccccccccccccccccccccccccccccccccccccccccccc
       integer h1_integrals(2),h2_integrals(2)
       integer vij(2),dnij(2),orbi(2),orbj(2),vhij(2)
       real*8 e1,e2,e2h,scal1,scal2,dv
+      character*50  filename
+      character*255 full_filename
 
 *     **** external functions ****
       integer  control_version
@@ -12029,6 +12074,7 @@ ccccccccccccccccccccccccccccccccccccccccccccccccccc
       end do
       call Parallel_Vector_SumAll(nnall,dbl_mb(h1_integrals(1)))
 
+
       if (oprint) then
          write(luout,*) "begin_one_electron_integrals"
          icount = 0
@@ -12041,7 +12087,10 @@ ccccccccccccccccccccccccccccccccccccccccccccccccccc
          end do
          write(luout,*) "end_one_electron_integrals"
 
-         open(unit=101,file="one_electron_integrals.dat")
+         filename = "one_electron_integrals.dat"
+         call util_file_name_noprefix(filename,.false.,.false.,
+     >                                full_filename)
+         open(unit=101,file=full_filename,form="formatted")
          write(101,'(3I5)') ne(1),ne_excited(1),icount
          icount = 0
          do i=1,nall
@@ -12171,7 +12220,11 @@ ccccccccccccccccccccccccccccccccccccccccccccccccccc
          end do
          write(luout,*) "end_two_electron_integrals"
          write(luout,*)
-         open(unit=102,file="two_electron_integrals.dat")
+
+         filename = "two_electron_integrals.dat"
+         call util_file_name_noprefix(filename,.false.,.false.,
+     >                                full_filename)
+         open(unit=102,file=full_filename,form="formatted")
          write(102,'(2I5,I10)') ne(1),ne_excited(1),iicount
          iicount = 0
          do ij=1,nnall
