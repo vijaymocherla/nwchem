@@ -419,7 +419,7 @@ BUILDING_PYTHON = $(filter $(NWSUBDIRS),python)
 # Establish some required defaults which may need overriding
 # for some machines
 
-SHELL = /bin/bash
+SHELL = /usr/bin/env bash
 ARFLAGS = r
 FDEBUG = -g
 CDEBUG = -g
@@ -1502,7 +1502,7 @@ ifeq ($(TARGET),$(findstring $(TARGET),LINUX CYGNUS CYGWIN))
 # Linux or Cygwin under Windows running on an x86 using g77
 #
     NICE = nice -n 2
-    SHELL := $(NICE) /bin/bash
+    SHELL := $(NICE) /usr/bin/env bash
 
     ifeq ($(BLASOPT),)
         CORE_SUBDIRS_EXTRA += blas
@@ -3096,9 +3096,11 @@ ifneq ($(TARGET),LINUX)
         # Jeff: FreeBSD does not link libm automatically with flang
         ifeq ($(USE_FLANG),1)
             EXTRA_LIBS += -lm
+            DEFINES  += -DUSE_FLANG
         endif
 
     endif
+
 endif
 #endof of LINUX64
 

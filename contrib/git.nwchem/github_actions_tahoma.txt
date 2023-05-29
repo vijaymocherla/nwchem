@@ -14,7 +14,7 @@ jobs:
     uses: edoapra/nwchem-singularity/.github/workflows/apptainer_action.ifx.yml@master
     secrets:
       inherit
-  build:
+  test_on_tahoma:
     needs: [build_singularity]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 2880
@@ -27,8 +27,8 @@ jobs:
           - master
         sing_image:
           - ompi41x.ifort
-          - ompi41x.ifx
           - ompi41x
+          - mpi-ts.ompi41x.ifort
       fail-fast: false
     env:
         USE_LIBXC: 1
